@@ -1,90 +1,95 @@
-from flask import redirect, url_for, request, session, render_template
-from flask_login import current_user, LoginManager, login_url, logout_user
-from werkzeug.exceptions import Forbidden, Unauthorized
-import datetime
-from funlab.web import models
+__version__ = "0.1.0"
 
 
-from functools import wraps
+import optparse
+from flask import Flask
+from dotenv import dotenv_values
 
 
-login_manager = LoginManager()
+from .. import models
+from . import views
+from . import acl
 
 
-
-
-def init_acl(app):
-   login_manager.init_app(app)
-   # principals.init_app(app)
-
-
-   @app.errorhandler(401)
-   def page_not_found(e):
-       return unauthorized_callback()
-
-
-   def no_permission(e):
-       if login_manager.unauthorized_callback:
-           return redirect(url_for("accounts.login"))
-       return render_template("error_handler/403.html"), 403
+app = Flask(__name__)
 
 
 
 
-def division_required(*divisions):
-   def wrapper(func):
-       @wraps(func)
-       def wrapped(*args, **kwargs):
-           if not current_user.is_authenticated:
-               raise Unauthorized()
-           if hasattr(current_user, "division"):
-               for division in divisions:
-                   if division == current_user.division:
-                       return func(*args, **kwargs)
-           raise Forbidden()
-
-
-       return wrapped
-
-
-   return wrapper
+def create_app():
+   app.config.from_object("funlab.default_settings")
+   app.config.from_envvar("FUNLAB_SETTINGS", silent=True)
+   config = dotenv_values(".env")
+   app.config.update(config)
 
 
 
 
-def roles_required(*roles):
-   def wrapper(func):
-       @wraps(func)
-       def wrapped(*args, **kwargs):
-           if not current_user.is_authenticated:
-               raise Unauthorized()
-           for role in roles:
-               if role in current_user.roles:
-                   return func(*args, **kwargs)
-           raise Forbidden()
+   models.init_db(app)
+   views.register_blueprint(app)
+   acl.init_acl(app)
 
 
-       return wrapped
+   jinja_env = app.jinja_env
+   jinja_env.add_extension("jinja2.ext.do")
 
 
-   return wrapper
+   return app
 
 
 
 
-@login_manager.user_loader
-def load_user(user_id):
-   user = models.User.objects(id=user_id).first()
-   return user
+def get_program_options(default_host="127.0.0.1", default_port="8080"):
+   """
+   Takes a flask.Flask instance and runs it. Parses
+   command-line flags to configure the app.
+   """
 
 
+   # Set up the command-line options
+   parser = optparse.OptionParser()
+   parser.add_option(
+       "-H",
+       "--host",
+       help="Hostname of the Flask app " + "[default %s]" % default_host,
+       default=default_host,
+   )
+   parser.add_option(
+       "-P",
+       "--port",
+       help="Port for the Flask app " + "[default %s]" % default_port,
+       default=default_port,
+   )
 
 
-@login_manager.unauthorized_handler
-def unauthorized_callback():
-   if request.method == "GET":
-       response = redirect(login_url("accounts.login", request.url))
-       return response
+   # Two options useful for debugging purposes, but
+   # a bit dangerous so not exposed in the help message.
+   parser.add_option(
+       "-c", "--config", dest="config", help=optparse.SUPPRESS_HELP, default=None
+   )
+   parser.add_option(
+       "-d", "--debug", action="store_true", dest="debug", help=optparse.SUPPRESS_HELP
+   )
+   parser.add_option(
+       "-p",
+       "--profile",
+       action="store_true",
+       dest="profile",
+       help=optparse.SUPPRESS_HELP,
+   )
 
 
-   return redirect(url_for("accounts.login"))
+   options, _ = parser.parse_args()
+   options.debug = app.debug
+
+
+   # If the user selects the profiling option, then we need
+   # to do a little extra setup
+   if options.profile:
+       from werkzeug.middleware.profiler import ProfilerMiddleware
+       app.config["PROFILE"] = True
+       app.wsgi_app = ProfilerMiddleware(app.wsgi_app, restrictions=[30])
+       options.debug = True
+
+
+   return options
