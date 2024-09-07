@@ -1,8 +1,8 @@
 # Ken_steak
-Saktanuth Praditukrit
-Pun
-Thanutham Supphanphon
+Saktanuth Praditukrit (funlab/forms)
+Pun (scripts)
+Thanutham Supphanphon (templates/views)
 Fish
-Pisit klinnoy
-kim kim kim 
-Hope
+Pisit klinnoy (models)
+kim kim kim (cmd)
+Hope (out of funlab)
