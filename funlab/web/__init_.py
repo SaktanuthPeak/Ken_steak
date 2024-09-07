@@ -80,7 +80,6 @@ def get_program_options(default_host="127.0.0.1", default_port="8080"):
 
 
    options, _ = parser.parse_args()
-   options.debug = app.debug
 
 
    # If the user selects the profiling option, then we need
